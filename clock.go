@@ -22,13 +22,30 @@ type Clock interface {
 	Timer(d time.Duration) *Timer
 }
 
-// New returns an instance of a real-time clock.
+// New returns an instance of a real-time clock. Also see NewOpt(), which takes
+// some options.
 func New() Clock {
-	return &clock{}
+	return NewOpt(Opt{})
+}
+
+type Opt struct {
+	// Shift is the shift of the real time, can be both positive or negative;
+	// if not zero, it's applied to Now() and Since(). It can be useful to e.g.
+	// debug clock skew in different parts of your app, like backend and frontend.
+	Shift time.Duration
+}
+
+// NewOpt is like New, but also takes options. See Opt for details.
+func NewOpt(opt Opt) Clock {
+	return &clock{
+		opt: opt,
+	}
 }
 
 // clock implements a real-time clock by simply wrapping the time package functions.
-type clock struct{}
+type clock struct {
+	opt Opt
+}
 
 func (c *clock) After(d time.Duration) <-chan time.Time { return time.After(d) }
 
@@ -36,9 +53,9 @@ func (c *clock) AfterFunc(d time.Duration, f func()) *Timer {
 	return &Timer{timer: time.AfterFunc(d, f)}
 }
 
-func (c *clock) Now() time.Time { return time.Now() }
+func (c *clock) Now() time.Time { return time.Now().Add(c.opt.Shift) }
 
-func (c *clock) Since(t time.Time) time.Duration { return time.Since(t) }
+func (c *clock) Since(t time.Time) time.Duration { return time.Now().Add(c.opt.Shift).Sub(t) }
 
 func (c *clock) Sleep(d time.Duration) { time.Sleep(d) }
 
