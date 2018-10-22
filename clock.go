@@ -111,16 +111,26 @@ func NewMockOpt(opt MockOpt) *Mock {
 	return mock
 }
 
+type TimeChangeOpt struct {
+	DontRunTimers bool
+}
+
 // Add moves the current time of the mock clock forward by the duration.
 // This should only be called from a single goroutine at a time.
 func (m *Mock) Add(d time.Duration) {
+	m.AddOpt(d, TimeChangeOpt{})
+}
+
+func (m *Mock) AddOpt(d time.Duration, params TimeChangeOpt) {
 	// Calculate the final current time.
 	t := m.now.Add(d)
 
 	// Continue to execute timers until there are no more before the new time.
-	for {
-		if !m.runNextTimer(t) {
-			break
+	if !params.DontRunTimers {
+		for {
+			if !m.runNextTimer(t) {
+				break
+			}
 		}
 	}
 
@@ -136,10 +146,16 @@ func (m *Mock) Add(d time.Duration) {
 // Set sets the current time of the mock clock to a specific one.
 // This should only be called from a single goroutine at a time.
 func (m *Mock) Set(t time.Time) {
+	m.SetOpt(t, TimeChangeOpt{})
+}
+
+func (m *Mock) SetOpt(t time.Time, params TimeChangeOpt) {
 	// Continue to execute timers until there are no more before the new time.
-	for {
-		if !m.runNextTimer(t) {
-			break
+	if !params.DontRunTimers {
+		for {
+			if !m.runNextTimer(t) {
+				break
+			}
 		}
 	}
 
@@ -169,13 +185,16 @@ func (m *Mock) runNextTimer(max time.Time) bool {
 
 	// Retrieve next timer. Exit if next tick is after new time.
 	t := m.timers[0]
-	if t.Next().After(max) {
+	nextTickTime := t.Next()
+	if nextTickTime.After(max) {
 		m.mu.Unlock()
 		return false
 	}
 
 	// Move "now" forward and unlock clock.
-	m.now = t.Next()
+	if nextTickTime.After(m.now) {
+		m.now = nextTickTime
+	}
 	m.mu.Unlock()
 
 	// Execute timer.
